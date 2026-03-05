@@ -1,0 +1,20 @@
+# Environment variables (contains secrets)
+.env
+
+# Generated files
+tech_news_dashboard.html
+test_dashboard.html
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
