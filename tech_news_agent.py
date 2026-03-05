@@ -755,9 +755,17 @@ Conteúdo das buscas:
             title = news.get('title', 'Sem título')
             lines.append(f"{i}. [{score}/10] {title}")
 
-        lines.append("")
-        lines.append("Dashboard gerado com sucesso.")
-        lines.append(f"Arquivo: {dashboard_path}")
+        # Links públicos (se configurado)
+        base_url = os.environ.get('REPORT_BASE_URL', '').strip()
+        if base_url:
+            lines.append("")
+            lines.append("*RELATÓRIOS:*")
+            lines.append(f"📊 HTML: {base_url}/tech_news_dashboard.html")
+            lines.append(f"📄 PDF: {base_url}/tech_news_dashboard.pdf")
+        else:
+            lines.append("")
+            lines.append("Dashboard gerado com sucesso.")
+            lines.append(f"Arquivo: {dashboard_path}")
 
         return "\n".join(lines)
 
@@ -875,21 +883,7 @@ Conteúdo das buscas:
 
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
-            print("   ✅ Resumo em texto enviado!")
-
-            # Enviar HTML como documento
-            self._send_whatsapp_document(
-                dashboard_path, "Dashboard HTML - Tech News Agent",
-                api_url, api_key, instance, phone
-            )
-
-            # Enviar PDF se existir
-            pdf_path = dashboard_path.replace('.html', '.pdf')
-            if os.path.exists(pdf_path):
-                self._send_whatsapp_document(
-                    pdf_path, "Dashboard PDF - Tech News Agent",
-                    api_url, api_key, instance, phone
-                )
+            print("   ✅ Notificação WhatsApp enviada com sucesso!")
 
             return True
 
@@ -928,7 +922,16 @@ Conteúdo das buscas:
 
         # Gerar PDF do dashboard
         print("\n📄 Gerando PDF...")
-        self._generate_pdf(dashboard_path)
+        pdf_path = self._generate_pdf(dashboard_path)
+
+        # Publicar relatórios na pasta pública (para acesso via link)
+        public_dir = os.environ.get('REPORT_PUBLIC_DIR', '').strip()
+        if public_dir and os.path.isdir(public_dir):
+            import shutil
+            shutil.copy2(dashboard_path, public_dir)
+            if pdf_path and os.path.exists(pdf_path):
+                shutil.copy2(pdf_path, public_dir)
+            print(f"📂 Relatórios publicados em: {public_dir}")
 
         # Enviar notificação WhatsApp
         print("\n📱 Enviando notificação WhatsApp...")
