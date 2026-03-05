@@ -755,13 +755,11 @@ Conteúdo das buscas:
             title = news.get('title', 'Sem título')
             lines.append(f"{i}. [{score}/10] {title}")
 
-        # Links públicos (se configurado)
+        # Link público (se configurado)
         base_url = os.environ.get('REPORT_BASE_URL', '').strip()
         if base_url:
             lines.append("")
-            lines.append("*RELATÓRIOS:*")
-            lines.append(f"📊 HTML: {base_url}/tech_news_dashboard.html")
-            lines.append(f"📄 PDF: {base_url}/tech_news_dashboard.pdf")
+            lines.append(f"📊 *Dashboard:*\n{base_url}/tech_news_dashboard.html")
         else:
             lines.append("")
             lines.append("Dashboard gerado com sucesso.")
@@ -920,18 +918,12 @@ Conteúdo das buscas:
         print("\n📊 Gerando dashboard...")
         dashboard_path = self.generate_dashboard(all_news)
 
-        # Gerar PDF do dashboard
-        print("\n📄 Gerando PDF...")
-        pdf_path = self._generate_pdf(dashboard_path)
-
-        # Publicar relatórios na pasta pública (para acesso via link)
+        # Publicar dashboard na pasta pública (para acesso via link)
         public_dir = os.environ.get('REPORT_PUBLIC_DIR', '').strip()
         if public_dir and os.path.isdir(public_dir):
             import shutil
             shutil.copy2(dashboard_path, public_dir)
-            if pdf_path and os.path.exists(pdf_path):
-                shutil.copy2(pdf_path, public_dir)
-            print(f"📂 Relatórios publicados em: {public_dir}")
+            print(f"📂 Dashboard publicado em: {public_dir}")
 
         # Enviar notificação WhatsApp
         print("\n📱 Enviando notificação WhatsApp...")
