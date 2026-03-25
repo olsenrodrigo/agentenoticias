@@ -1,14 +1,11 @@
 #!/bin/bash
-# Script para executar o Tech News Agent automaticamente
+# Script para executar o Tech News Agent manualmente
+cd /opt/tech-news-agent
+source venv/bin/activate
+set -a
+source .env
+set +a
 
-# Diretório do projeto
-cd "/Users/olsenrodrigo/Google Drive/Meu Drive/Claude/AgenteBuscaNoticias"
+python3 -u tech_news_agent.py
 
-# Carregar variáveis de ambiente
-export $(cat .env | xargs)
-
-# Executar o agente (teste completo)
-/usr/bin/python3 tech_news_agent.py
-
-# Log de execução
-echo "$(date): Agente executado com sucesso" >> agent_log.txt
+echo "$(date): Agente executado com sucesso" >> agent.log

@@ -6,8 +6,13 @@ Desenvolvido para criadores de conteúdo em vídeo
 
 import json
 import os
+import smtplib
 import time
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from pathlib import Path
 import anthropic
 
@@ -705,9 +710,9 @@ Conteúdo das buscas:
         print(f"✅ Dashboard gerado: {output_path}")
         return output_path
     
-    def _format_whatsapp_message(self, all_news, dashboard_path, days_back):
+    def _format_email_html(self, all_news, dashboard_path, days_back):
         """
-        Formata a mensagem de resumo para WhatsApp
+        Formata o corpo do e-mail em HTML com resumo das notícias
 
         Args:
             all_news: Dicionário com notícias por categoria
@@ -715,13 +720,12 @@ Conteúdo das buscas:
             days_back: Dias cobertos pela coleta
 
         Returns:
-            Mensagem formatada para WhatsApp
+            HTML formatado para o corpo do e-mail
         """
         now = datetime.now()
         period_start = (now - timedelta(days=days_back)).strftime('%d/%m')
         period_end = now.strftime('%d/%m/%Y')
 
-        # Totais por categoria
         category_counts = {}
         all_items = []
         for category, news_list in all_news.items():
@@ -730,114 +734,74 @@ Conteúdo das buscas:
             all_items.extend(news_list)
 
         total = len(all_items)
-
-        # Top 5 por relevância
         top_news = sorted(all_items, key=lambda x: x.get('relevance_score', 0), reverse=True)[:5]
 
-        lines = [
-            "*TECH NEWS AGENT*",
-            "Relatório Semanal",
-            "",
-            f"Período: {period_start} - {period_end}",
-            f"Total: {total} notícias coletadas",
-            "",
-            "*POR CATEGORIA:*",
-        ]
-
+        categories_html = ""
         for cat_name, count in category_counts.items():
-            lines.append(f"  {cat_name}: {count}")
+            categories_html += f"<li><strong>{cat_name}:</strong> {count} notícias</li>"
 
-        lines.append("")
-        lines.append("*TOP NOTÍCIAS:*")
-
+        top_news_html = ""
         for i, news in enumerate(top_news, 1):
             score = news.get('relevance_score', 0)
             title = news.get('title', 'Sem título')
-            lines.append(f"{i}. [{score}/10] {title}")
+            url = news.get('url', '#')
+            summary = news.get('summary', '')
+            region = news.get('region', 'world')
+            flag = '&#x1F1E7;&#x1F1F7;' if region == 'br' else '&#x1F30E;'
+            top_news_html += f"""
+            <tr>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <strong>{i}. {flag} <a href="{url}" style="color: #667eea; text-decoration: none;">{title}</a></strong>
+                    <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px;">&#11088; {score}/10</span>
+                    <br><span style="color: #666; font-size: 14px;">{summary}</span>
+                </td>
+            </tr>"""
 
-        # Link público (se configurado)
+        dashboard_link = ""
         base_url = os.environ.get('REPORT_BASE_URL', '').strip()
         if base_url:
-            lines.append("")
-            lines.append(f"📊 *Dashboard:*\n{base_url}/tech_news_dashboard.html")
-        else:
-            lines.append("")
-            lines.append("Dashboard gerado com sucesso.")
-            lines.append(f"Arquivo: {dashboard_path}")
+            dashboard_link = f'<a href="{base_url}/tech_news_dashboard.html" style="display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">&#x1F4CA; Abrir Dashboard Completo</a>'
 
-        return "\n".join(lines)
+        return f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 20px;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">&#x1F680; Tech News Agent</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0;">Relatório Semanal: {period_start} - {period_end}</p>
+            </div>
 
-    def _generate_pdf(self, html_path):
+            <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <div style="display: flex; text-align: center;">
+                    <div style="flex: 1; padding: 10px;">
+                        <div style="font-size: 28px; font-weight: bold; color: #667eea;">{total}</div>
+                        <div style="color: #888; font-size: 13px;">Total</div>
+                    </div>
+                </div>
+                <ul style="list-style: none; padding: 0; margin: 15px 0 0 0;">
+                    {categories_html}
+                </ul>
+            </div>
+
+            <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <h2 style="color: #667eea; margin: 0 0 15px 0; font-size: 18px;">&#x1F525; Top 5 Notícias da Semana</h2>
+                <table style="width: 100%; border-collapse: collapse;">
+                    {top_news_html}
+                </table>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 20px;">
+                {dashboard_link}
+            </div>
+
+            <p style="text-align: center; color: #999; font-size: 12px; margin: 0;">
+                &#x1F916; Gerado automaticamente pelo Tech News Agent<br>
+                O dashboard HTML completo está anexado a este e-mail.
+            </p>
+        </div>
         """
-        Gera PDF a partir do dashboard HTML
 
-        Args:
-            html_path: Caminho do arquivo HTML
-
-        Returns:
-            Caminho do PDF gerado, ou None se falhar
+    def _send_email_notification(self, all_news, dashboard_path, days_back):
         """
-        try:
-            from weasyprint import HTML
-        except ImportError:
-            print("   ⚠️  Biblioteca 'weasyprint' não instalada. PDF não será gerado.")
-            return None
-
-        try:
-            pdf_path = html_path.replace('.html', '.pdf')
-            HTML(filename=html_path).write_pdf(pdf_path)
-            print(f"   ✅ PDF gerado: {pdf_path}")
-            return pdf_path
-        except Exception as e:
-            print(f"   ⚠️  Falha ao gerar PDF: {e}")
-            return None
-
-    def _send_whatsapp_document(self, file_path, caption, api_url, api_key, instance, phone):
-        """
-        Envia um documento via WhatsApp (Evolution API v1.x)
-
-        Args:
-            file_path: Caminho do arquivo a enviar
-            caption: Legenda do documento
-            api_url, api_key, instance, phone: Credenciais Evolution API
-
-        Returns:
-            True se enviou com sucesso, False caso contrário
-        """
-        import requests
-        import base64
-
-        try:
-            with open(file_path, 'rb') as f:
-                file_b64 = base64.b64encode(f.read()).decode('utf-8')
-
-            file_name = os.path.basename(file_path)
-            url = f"{api_url.rstrip('/')}/message/sendMedia/{instance}"
-            headers = {
-                "apikey": api_key,
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "number": phone,
-                "mediaMessage": {
-                    "mediatype": "document",
-                    "fileName": file_name,
-                    "media": file_b64,
-                    "caption": caption
-                }
-            }
-
-            response = requests.post(url, json=payload, headers=headers, timeout=60)
-            response.raise_for_status()
-            print(f"   ✅ Documento enviado: {file_name}")
-            return True
-        except Exception as e:
-            print(f"   ⚠️  Falha ao enviar documento {file_path}: {e}")
-            return False
-
-    def _send_whatsapp_notification(self, all_news, dashboard_path, days_back):
-        """
-        Envia notificação WhatsApp via Evolution API
+        Envia notificação por e-mail via Gmail SMTP
 
         Args:
             all_news: Dicionário com notícias por categoria
@@ -848,45 +812,55 @@ Conteúdo das buscas:
             True se enviou com sucesso, False caso contrário
         """
         try:
-            import requests
-        except ImportError:
-            print("   ⚠️  Biblioteca 'requests' não instalada. Execute: pip install requests")
-            return False
+            smtp_host = os.environ.get('SMTP_HOST', 'smtp.gmail.com').strip()
+            smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+            email_from = os.environ.get('EMAIL_FROM', '').strip()
+            email_password = os.environ.get('EMAIL_PASSWORD', '').strip()
+            email_to = os.environ.get('EMAIL_TO', '').strip()
 
-        try:
-            api_url = os.environ.get('EVOLUTION_API_URL', '').strip()
-            api_key = os.environ.get('EVOLUTION_API_KEY', '').strip()
-            instance = os.environ.get('EVOLUTION_INSTANCE', '').strip()
-            phone = os.environ.get('WHATSAPP_PHONE', '').strip()
-
-            if not api_url:
-                print("   ℹ️  WhatsApp não configurado (EVOLUTION_API_URL vazia). Pulando notificação.")
+            if not email_from:
+                print("   ℹ️  E-mail não configurado (EMAIL_FROM vazia). Pulando notificação.")
                 return False
 
-            if not all([api_key, instance, phone]):
-                print("   ⚠️  Configuração WhatsApp incompleta. Verifique EVOLUTION_API_KEY, EVOLUTION_INSTANCE e WHATSAPP_PHONE no .env")
+            if not all([email_password, email_to]):
+                print("   ⚠️  Configuração de e-mail incompleta. Verifique EMAIL_FROM, EMAIL_PASSWORD e EMAIL_TO no .env")
                 return False
 
-            message = self._format_whatsapp_message(all_news, dashboard_path, days_back)
+            now = datetime.now()
+            period_start = (now - timedelta(days=days_back)).strftime('%d/%m')
+            period_end = now.strftime('%d/%m/%Y')
 
-            url = f"{api_url.rstrip('/')}/message/sendText/{instance}"
-            headers = {
-                "apikey": api_key,
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "number": phone,
-                "textMessage": {"text": message}
-            }
+            msg = MIMEMultipart('mixed')
+            msg['From'] = email_from
+            msg['To'] = email_to
+            msg['Subject'] = f"Tech News - Relatório Semanal ({period_start} - {period_end})"
 
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-            print("   ✅ Notificação WhatsApp enviada com sucesso!")
+            html_body = self._format_email_html(all_news, dashboard_path, days_back)
+            msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
+            # Anexar o dashboard HTML
+            if os.path.exists(dashboard_path):
+                with open(dashboard_path, 'r', encoding='utf-8') as f:
+                    attachment = MIMEBase('text', 'html')
+                    attachment.set_payload(f.read().encode('utf-8'))
+                    encoders.encode_base64(attachment)
+                    attachment.add_header(
+                        'Content-Disposition',
+                        'attachment',
+                        filename='tech_news_dashboard.html'
+                    )
+                    msg.attach(attachment)
+
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(email_from, email_password)
+                server.send_message(msg)
+
+            print("   ✅ E-mail enviado com sucesso!")
             return True
 
         except Exception as e:
-            print(f"   ⚠️  Falha ao enviar WhatsApp: {e}")
+            print(f"   ⚠️  Falha ao enviar e-mail: {e}")
             return False
 
     def run_weekly_collection(self, days_back=7):
@@ -925,9 +899,9 @@ Conteúdo das buscas:
             shutil.copy2(dashboard_path, public_dir)
             print(f"📂 Dashboard publicado em: {public_dir}")
 
-        # Enviar notificação WhatsApp
-        print("\n📱 Enviando notificação WhatsApp...")
-        self._send_whatsapp_notification(all_news, dashboard_path, days_back)
+        # Enviar notificação por e-mail
+        print("\n📧 Enviando notificação por e-mail...")
+        self._send_email_notification(all_news, dashboard_path, days_back)
 
         return dashboard_path
 
